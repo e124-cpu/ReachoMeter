@@ -1,27 +1,56 @@
 package com.example.reachmeter;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
+import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 
-import java.util.Locale;
-
 public class ReachMeterClient implements ClientModInitializer {
+
+    private static final KeyMapping.Category CATEGORY = KeyMapping.Category.register(
+        Identifier.fromNamespaceAndPath("reachmeter", "settings")
+    );
+
+    private static KeyMapping openSettingsKey;
 
     @Override
     public void onInitializeClient() {
-        // The little counter in the bottom-left corner
-        HudElementRegistry.addLast(
-            Identifier.fromNamespaceAndPath("reachmeter", "reach_counter"),
-            (graphics, deltaTracker) -> render(graphics)
+        openSettingsKey = KeyBindingHelper.registerKeyBinding(
+            new KeyMapping(
+                "key.reachmeter.open_settings",
+                InputConstants.Type.KEYSYM,
+                InputConstants.KEY_PAGEUP,
+                CATEGORY
+            )
         );
 
-        // /reachreset clears the stats
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            ReachHistory.tick(client);
+            while (openSettingsKey.consumeClick()) {
+                if (client.screen == null) {
+                    client.setScreen(new ReachSettingsScreen(null));
+                }
+            }
+        });
+
+        HudElementRegistry.addLast(
+            Identifier.fromNamespaceAndPath("reachmeter", "reach_counter"),
+            (graphics, deltaTracker) -> {
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.screen instanceof PlacementScreen) return;
+                int x = ReachHud.x(graphics.guiWidth(), mc.font);
+                int y = ReachHud.y(graphics.guiHeight());
+                ReachHud.draw(graphics, mc.font, x, y);
+            }
+        );
+
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
             dispatcher.register(ClientCommandManager.literal("reachreset").executes(ctx -> {
                 ReachStats.reset();
@@ -29,35 +58,5 @@ public class ReachMeterClient implements ClientModInitializer {
                 return 1;
             }))
         );
-    }
-
-    private static void render(GuiGraphics graphics) {
-        Minecraft mc = Minecraft.getInstance();
-
-        String line1;
-        int color;
-        if (ReachStats.count == 0) {
-            line1 = "Enemies reach: --";
-            color = 0xFFFFFFFF;
-        } else {
-            line1 = String.format(Locale.ROOT, "Enemies reach: %.2f", ReachStats.last);
-            if (ReachStats.last <= 3.05) {
-                color = 0xFF55FF55;      // green: normal
-            } else if (ReachStats.last <= 3.5) {
-                color = 0xFFFFFF55;      // yellow: borderline
-            } else {
-                color = 0xFFFF5555;      // red: suspicious
-            }
-        }
-        int bottom = graphics.guiHeight();
-
-        if (ReachStats.count > 0) {
-            String line2 = String.format(Locale.ROOT, "Avg %.2f | Max %.2f | Hits %d",
-                ReachStats.average(), ReachStats.max, ReachStats.count);
-            graphics.drawString(mc.font, line2, 6, bottom - 12, 0xFFAAAAAA, true);
-            graphics.drawString(mc.font, line1, 6, bottom - 24, color, true);
-        } else {
-            graphics.drawString(mc.font, line1, 6, bottom - 12, color, true);
-        }
     }
 }

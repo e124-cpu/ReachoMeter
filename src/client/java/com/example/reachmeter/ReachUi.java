@@ -20,6 +20,7 @@ class ReachSettings {
 
     public static double xFrac = DEFAULT_X;
     public static double yFrac = DEFAULT_Y;
+    public static boolean enabled = true;
 
     private static final Path FILE =
         FabricLoader.getInstance().getConfigDir().resolve("reachmeter-settings.txt");
@@ -41,10 +42,16 @@ class ReachSettings {
             for (String line : lines) {
                 String[] parts = line.trim().split("=");
                 if (parts.length != 2) continue;
+                String key = parts[0].trim();
+                String value = parts[1].trim();
+                if (key.equals("enabled")) {
+                    enabled = Boolean.parseBoolean(value);
+                    continue;
+                }
                 try {
-                    double v = Double.parseDouble(parts[1].trim());
-                    if (parts[0].trim().equals("x")) xFrac = clamp01(v);
-                    if (parts[0].trim().equals("y")) yFrac = clamp01(v);
+                    double v = Double.parseDouble(value);
+                    if (key.equals("x")) xFrac = clamp01(v);
+                    if (key.equals("y")) yFrac = clamp01(v);
                 } catch (NumberFormatException ignored) {
                 }
             }
@@ -55,7 +62,8 @@ class ReachSettings {
 
     public static void save() {
         try {
-            Files.writeString(FILE, String.format(Locale.ROOT, "x=%.4f%ny=%.4f%n", xFrac, yFrac));
+            Files.writeString(FILE, String.format(Locale.ROOT,
+                "x=%.4f%ny=%.4f%nenabled=%s%n", xFrac, yFrac, enabled));
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -120,15 +128,31 @@ class ReachSettingsScreen extends Screen {
         this.parent = parent;
     }
 
+    private static Component toggleLabel() {
+        return Component.literal("Counter: " + (ReachSettings.enabled ? "ON" : "OFF"));
+    }
+
     @Override
     protected void init() {
         int cx = this.width / 2;
         int top = this.height / 4;
 
+        // Setting 1: Placement
         this.addRenderableWidget(
             Button.builder(Component.literal("Placement"),
                     b -> this.minecraft.setScreen(new PlacementScreen(this)))
                 .bounds(cx - 100, top, 200, 20)
+                .build()
+        );
+
+        // Setting 2: turn the counter on or off
+        this.addRenderableWidget(
+            Button.builder(toggleLabel(), b -> {
+                    ReachSettings.enabled = !ReachSettings.enabled;
+                    ReachSettings.save();
+                    b.setMessage(toggleLabel());
+                })
+                .bounds(cx - 100, top + 24, 200, 20)
                 .build()
         );
 

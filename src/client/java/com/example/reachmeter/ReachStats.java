@@ -14,23 +14,34 @@ public class ReachStats {
     public static double max = 0;
     public static double sum = 0;
     public static int count = 0;
+    public static long lastHitMillis = 0;
+
+    public static final long RESET_AFTER_MS = 5000;
 
     private static final Path LOG =
         FabricLoader.getInstance().getConfigDir().resolve("reachmeter-log.txt");
 
-    public static void record(String attackerName, double distance) {
+    public static void record(String attackerName, double distance, double rawDistance, int lagTicks) {
         last = distance;
         sum += distance;
         count++;
+        lastHitMillis = System.currentTimeMillis();
         if (distance > max) max = distance;
 
-        String line = String.format(Locale.ROOT, "%s | %s | %.2f blocks%n",
-            LocalTime.now().withNano(0), attackerName, distance);
+        String line = String.format(Locale.ROOT,
+            "%s | %s | %.2f blocks (raw %.2f, lag compensation %d ticks)%n",
+            LocalTime.now().withNano(0), attackerName, distance, rawDistance, lagTicks);
         try {
             Files.writeString(LOG, line, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    public static double displayed() {
+        if (count == 0) return 0;
+        if (System.currentTimeMillis() - lastHitMillis > RESET_AFTER_MS) return 0;
+        return last;
     }
 
     public static double average() {
@@ -42,5 +53,6 @@ public class ReachStats {
         max = 0;
         sum = 0;
         count = 0;
+        lastHitMillis = 0;
     }
 }

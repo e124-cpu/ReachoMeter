@@ -19,9 +19,11 @@ public class ReachMeterClient implements ClientModInitializer {
     );
 
     private static KeyMapping openSettingsKey;
+    private static KeyMapping toggleKey;
 
     @Override
     public void onInitializeClient() {
+        // Page Up opens the settings screen (rebindable in Controls)
         openSettingsKey = KeyBindingHelper.registerKeyBinding(
             new KeyMapping(
                 "key.reachmeter.open_settings",
@@ -31,18 +33,42 @@ public class ReachMeterClient implements ClientModInitializer {
             )
         );
 
+        // Turns the counter on/off. Unbound by default (-1), pick a key in Controls.
+        toggleKey = KeyBindingHelper.registerKeyBinding(
+            new KeyMapping(
+                "key.reachmeter.toggle",
+                InputConstants.Type.KEYSYM,
+                -1,
+                CATEGORY
+            )
+        );
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             ReachHistory.tick(client);
+
             while (openSettingsKey.consumeClick()) {
                 if (client.screen == null) {
                     client.setScreen(new ReachSettingsScreen(null));
                 }
             }
+
+            while (toggleKey.consumeClick()) {
+                ReachSettings.enabled = !ReachSettings.enabled;
+                ReachSettings.save();
+                if (client.player != null) {
+                    client.player.displayClientMessage(
+                        Component.literal("Reachometer: " + (ReachSettings.enabled ? "ON" : "OFF")),
+                        true
+                    );
+                }
+            }
         });
 
+        // The counter itself (hidden when switched off)
         HudElementRegistry.addLast(
             Identifier.fromNamespaceAndPath("reachmeter", "reach_counter"),
             (graphics, deltaTracker) -> {
+                if (!ReachSettings.enabled) return;
                 Minecraft mc = Minecraft.getInstance();
                 if (mc.screen instanceof PlacementScreen) return;
                 int x = ReachHud.x(graphics.guiWidth(), mc.font);
@@ -51,6 +77,7 @@ public class ReachMeterClient implements ClientModInitializer {
             }
         );
 
+        // /reachreset clears the stats
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) ->
             dispatcher.register(ClientCommandManager.literal("reachreset").executes(ctx -> {
                 ReachStats.reset();

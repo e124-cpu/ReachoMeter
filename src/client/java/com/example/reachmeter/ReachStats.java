@@ -22,6 +22,9 @@ public class ReachStats {
         FabricLoader.getInstance().getConfigDir().resolve("reachmeter-log.txt");
 
     public static void record(String attackerName, double distance, double rawDistance, int lagTicks) {
+        // Counter switched off: don't track or log anything
+        if (!ReachSettings.enabled) return;
+
         last = distance;
         sum += distance;
         count++;

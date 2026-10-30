@@ -1,4 +1,5 @@
 {
   "key.category.reachmeter.settings": "Reachometer",
-  "key.reachmeter.open_settings": "Open Reachometer Settings"
+  "key.reachmeter.open_settings": "Open Reachometer Settings",
+  "key.reachmeter.toggle": "Toggle Reachometer"
 }

@@ -1,8 +1,10 @@
 package com.example.reachmeter.mixin;
 
+import com.example.reachmeter.ReachHistory;
 import com.example.reachmeter.ReachStats;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.network.protocol.game.ClientboundDamageEventPacket;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -22,25 +24,34 @@ public abstract class ClientPacketListenerMixin {
         Minecraft mc = Minecraft.getInstance();
         if (!mc.isSameThread() || mc.player == null || mc.level == null) return;
 
-        // Only hits on ME
         if (packet.entityId() != mc.player.getId()) return;
 
-        // Only direct melee hits (not arrows, tridents, etc.)
         int causeId = packet.sourceCauseId();
         if (causeId < 0 || causeId != packet.sourceDirectId()) return;
 
         Entity cause = mc.level.getEntity(causeId);
         if (!(cause instanceof Player attacker) || attacker == mc.player) return;
 
-        // Distance from the attacker's eyes to the closest point of MY hitbox
-        // (this is how the game measures reach)
         Vec3 eye = attacker.getEyePosition();
-        AABB box = mc.player.getBoundingBox();
-        double cx = Mth.clamp(eye.x, box.minX, box.maxX);
-        double cy = Mth.clamp(eye.y, box.minY, box.maxY);
-        double cz = Mth.clamp(eye.z, box.minZ, box.maxZ);
-        double distance = eye.distanceTo(new Vec3(cx, cy, cz));
 
-        ReachStats.record(attacker.getName().getString(), distance);
+        double raw = distanceToBox(eye, mc.player.getBoundingBox());
+
+        int lagTicks = 0;
+        ClientPacketListener connection = (ClientPacketListener) (Object) this;
+        PlayerInfo info = connection.getPlayerInfo(mc.player.getUUID());
+        if (info != null) {
+            lagTicks = Mth.clamp(Math.round(info.getLatency() / 50.0f), 0, 10);
+        }
+        AABB myBox = ReachHistory.get(lagTicks, mc.player.getBoundingBox());
+        double compensated = distanceToBox(eye, myBox);
+
+        ReachStats.record(attacker.getName().getString(), compensated, raw, lagTicks);
+    }
+
+    private static double distanceToBox(Vec3 point, AABB box) {
+        double cx = Mth.clamp(point.x, box.minX, box.maxX);
+        double cy = Mth.clamp(point.y, box.minY, box.maxY);
+        double cz = Mth.clamp(point.z, box.minZ, box.maxZ);
+        return point.distanceTo(new Vec3(cx, cy, cz));
     }
 }
